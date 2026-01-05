@@ -32,7 +32,7 @@ def save_chores(chores):
         json.dump(chores, f, indent=4)
 
 @bot.command()
-async def add_chore(ctx, user: discord.Member, chore_name: str, frequency_days: int):
+async def addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int):
     chores = load_chores()
     
     chores[chore_name] = {
@@ -45,7 +45,7 @@ async def add_chore(ctx, user: discord.Member, chore_name: str, frequency_days: 
     await ctx.send(f'Chore "{chore_name}" added for {user.mention} with frequency {frequency_days} days.')
 
 @bot.command()
-async def add_weekly_chore(ctx, user: discord.Member, chore_name: str):
+async def addweeklychore(ctx, user: discord.Member, chore_name: str):
     chores = load_chores()
     
     chores[chore_name] = {
@@ -56,5 +56,16 @@ async def add_weekly_chore(ctx, user: discord.Member, chore_name: str):
 
     save_chores(chores)
     await ctx.send(f'Weekly chore "{chore_name}" added for {user.mention}.')
+
+@bot.command()
+async def removechore(ctx, chore_name: str):
+    chores = load_chores()
+    
+    if chore_name in chores:
+        del chores[chore_name]
+        save_chores(chores)
+        await ctx.send(f'Chore "{chore_name}" removed.')
+    else:
+        await ctx.send(f'Chore "{chore_name}" not found.')
 
 bot.run(TOKEN)
