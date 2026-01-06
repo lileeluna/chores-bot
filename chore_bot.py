@@ -104,10 +104,13 @@ async def listrotation(ctx):
 
     await ctx.send(message)
 
-# Command to add a chore with custom frequency
-@bot.command()
-async def addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int):
+# Helper function to add a chore
+async def __addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int):
     chores = load_chores()
+
+    if user.id not in load_chore_rotation():
+        await ctx.send(f'{user.mention} is not in the chore rotation. Please add them first using !adduser.')
+        return
     
     chores[chore_name] = {
         'user_id': user.id,
@@ -118,19 +121,22 @@ async def addchore(ctx, user: discord.Member, chore_name: str, frequency_days: i
     save_chores(chores)
     await ctx.send(f'Chore "{chore_name}" added for {user.mention} with frequency {frequency_days} days.')
 
+# Command to add a chore with custom frequency
+@bot.command()
+async def addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int):
+    await __addchore(ctx, user, chore_name, frequency_days)
+
 # Command to add a weekly chore
 @bot.command()
 async def addweeklychore(ctx, user: discord.Member, chore_name: str):
-    chores = load_chores()
-    
-    chores[chore_name] = {
-        'user_id': user.id,
-        'frequency_days': 7,
-        'last_done': None
-    }
+    await __addchore(ctx, user, chore_name, 7)
 
-    save_chores(chores)
-    await ctx.send(f'Weekly chore "{chore_name}" added for {user.mention}.')
+# Command to add a monthly chore
+@bot.command()
+async def addmonthlychore(ctx, user: discord.Member, chore_name: str):
+    curr_month = datetime.now(timezone.utc).month
+    days_in_month = (datetime(datetime.now(timezone.utc).year, curr_month % 12 + 1, 1) - relativedelta(days=1)).day
+    await __addchore(ctx, user, chore_name, days_in_month)
 
 # Command to remove a chore
 @bot.command()
