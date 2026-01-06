@@ -105,7 +105,7 @@ async def listrotation(ctx):
     await ctx.send(message)
 
 # Helper function to add a chore
-async def __addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int):
+async def __addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int, rotates: bool = False, reoccurring: bool = True):
     chores = load_chores()
 
     if user.id not in load_chore_rotation():
@@ -115,7 +115,10 @@ async def __addchore(ctx, user: discord.Member, chore_name: str, frequency_days:
     chores[chore_name] = {
         'user_id': user.id,
         'frequency_days': frequency_days,
-        'last_done': None
+        'last_done': None,
+        'last_done_by': None,
+        'rotates': rotates,
+        'reoccurring': reoccurring
     }
 
     save_chores(chores)
@@ -123,8 +126,8 @@ async def __addchore(ctx, user: discord.Member, chore_name: str, frequency_days:
 
 # Command to add a chore with custom frequency
 @bot.command()
-async def addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int):
-    await __addchore(ctx, user, chore_name, frequency_days)
+async def addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int, rotates: bool = False, reoccurring: bool = True):
+    await __addchore(ctx, user, chore_name, frequency_days, rotates, reoccurring)
 
 # Command to add a weekly chore
 @bot.command()
@@ -150,6 +153,12 @@ async def removechore(ctx, chore_name: str):
     else:
         await ctx.send(f'Chore "{chore_name}" not found.')
 
+# Command to clear all chores
+@bot.command()
+async def clearchores(ctx):
+    save_chores({})
+    await ctx.send('All chores cleared.')
+
 # Command to list all chores
 @bot.command()
 async def listchores(ctx):
@@ -164,6 +173,9 @@ async def listchores(ctx):
         print(details['user_id'])
         user = await bot.fetch_user(details['user_id'])
         last_done = details['last_done'] or 'Never'
+        last_done_by = details['last_done_by']
+        if last_done_by:
+            last_done += f' by <@{last_done_by}>'
         message += f'- {chore_name}: assigned to {user.mention if user else "Unknown User"}, frequency {details["frequency_days"]} days, last done: {last_done}\n'
 
     await ctx.send(message)
@@ -172,6 +184,10 @@ async def listchores(ctx):
 @bot.command()
 async def donechore(ctx, chore_name: str):
     chores = load_chores()
+    user = ctx.author
+
+    if user.id == chores[chore_name]['user_id']:
+        chores[chore_name]['last_done_by'] = user.id
     
     if chore_name in chores:
         chores[chore_name]['last_done'] = datetime.now(timezone.utc).date().isoformat()
