@@ -6,6 +6,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
+import re
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -97,28 +98,49 @@ async def listrotation(ctx):
         await ctx.send('Chore rotation is empty.')
         return
 
-    message = 'Chore Rotation:\n'
+    message = 'Default Chore Rotation:\n'
     for user_id in rotation:
         user = await bot.fetch_user(user_id)
         message += f'- {user.mention if user else "Unknown User"}\n'
 
     await ctx.send(message)
 
+def get_next_user_in_rotation(rotation: list[int], current_user_id: int) -> int:
+    if len(rotation) == 1:
+        return rotation[0] if rotation else None
+    
+    if current_user_id not in rotation:
+        return rotation[0] if rotation else None
+    current_index = rotation.index(current_user_id)
+    next_index = (current_index + 1) % len(rotation)
+    return rotation[next_index]
+
 # Helper function to add a chore
-async def __addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int, rotates: bool = False, reoccurring: bool = True):
+async def __addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int, rotation: str = None):
     chores = load_chores()
+
+    if chore_name in chores:
+        await ctx.send(f'Chore "{chore_name}" already exists! Please choose a different name or remove the existing chore first.')
+        return
 
     if user.id not in load_chore_rotation():
         await ctx.send(f'{user.mention} is not in the chore rotation. Please add them first using !adduser.')
         return
     
+    if rotation is None:
+        rotation = load_chore_rotation()
+    else:
+        rotation = [int(uid) for uid in re.findall(r'<@!?(\d+)>', rotation)]
+
+    if user.id not in rotation:
+        rotation.append(user.id)
+    
     chores[chore_name] = {
-        'user_id': user.id,
+        'assigned_to': user.id,
         'frequency_days': frequency_days,
         'last_done': None,
         'last_done_by': None,
-        'rotates': rotates,
-        'reoccurring': reoccurring
+        'rotation': rotation
     }
 
     save_chores(chores)
@@ -126,20 +148,20 @@ async def __addchore(ctx, user: discord.Member, chore_name: str, frequency_days:
 
 # Command to add a chore with custom frequency
 @bot.command()
-async def addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int, rotates: bool = False, reoccurring: bool = True):
-    await __addchore(ctx, user, chore_name, frequency_days, rotates, reoccurring)
+async def addchore(ctx, user: discord.Member, chore_name: str, frequency_days: int, rotation: str = None):
+    await __addchore(ctx, user, chore_name, frequency_days, rotation)
 
 # Command to add a weekly chore
 @bot.command()
-async def addweeklychore(ctx, user: discord.Member, chore_name: str):
-    await __addchore(ctx, user, chore_name, 7)
+async def addweeklychore(ctx, user: discord.Member, chore_name: str, rotation: str = None):
+    await __addchore(ctx, user, chore_name, 7, rotation)
 
 # Command to add a monthly chore
 @bot.command()
-async def addmonthlychore(ctx, user: discord.Member, chore_name: str):
-    curr_month = datetime.now(timezone.utc).month
-    days_in_month = (datetime(datetime.now(timezone.utc).year, curr_month % 12 + 1, 1) - relativedelta(days=1)).day
-    await __addchore(ctx, user, chore_name, days_in_month)
+async def addmonthlychore(ctx, user: discord.Member, chore_name: str, rotation: str = None):
+    curr_month = datetime.now().astimezone().month
+    days_in_month = (datetime(datetime.now().astimezone().year, curr_month % 12 + 1, 1) - relativedelta(days=1)).day
+    await __addchore(ctx, user, chore_name, days_in_month, rotation)
 
 # Command to remove a chore
 @bot.command()
@@ -170,8 +192,8 @@ async def listchores(ctx):
 
     message = 'Chores:\n'
     for chore_name, details in chores.items():
-        print(details['user_id'])
-        user = await bot.fetch_user(details['user_id'])
+        print(details['assigned_to'])
+        user = await bot.fetch_user(details['assigned_to'])
         last_done = details['last_done'] or 'Never'
         last_done_by = details['last_done_by']
         if last_done_by:
@@ -186,11 +208,16 @@ async def donechore(ctx, chore_name: str):
     chores = load_chores()
     user = ctx.author
 
-    if user.id == chores[chore_name]['user_id']:
-        chores[chore_name]['last_done_by'] = user.id
-    
+    if chore_name not in chores:
+        await ctx.send(f'Chore "{chore_name}" not found.')
+        return
+
+    if user.id == chores[chore_name]['assigned_to']:
+        chores[chore_name]['assigned_to'] = get_next_user_in_rotation(chores[chore_name]['rotation'], user.id)
+
+    chores[chore_name]['last_done_by'] = user.id
     if chore_name in chores:
-        chores[chore_name]['last_done'] = datetime.now(timezone.utc).date().isoformat()
+        chores[chore_name]['last_done'] = datetime.now().astimezone().date().isoformat()
         save_chores(chores)
         await ctx.send(f'Chore "{chore_name}" marked as done.')
     else:
