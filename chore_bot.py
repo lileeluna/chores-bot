@@ -111,7 +111,7 @@ def add_smiley(user_id: int, chore: str):
     save_smiley_system(smiley_system)
 
 # Helper function to remove a smiley
-def add_smiley(user_id: int, chore: str):
+def remove_smiley(user_id: int, chore: str):
     smiley_system = load_smiley_system()
     if str(user_id) not in smiley_system:
         smiley_system[str(user_id)] = {}
@@ -123,6 +123,16 @@ def add_smiley(user_id: int, chore: str):
         smiley_system[str(user_id)][chore] = 0
     save_smiley_system(smiley_system)
 
+# Helper function to get smiley count
+def get_smileys(user_id: int, chore: str):
+    smiley_system = load_smiley_system()
+    if str(user_id) not in smiley_system:
+        return 0
+    if chore not in smiley_system[str(user_id)]:
+        return 0
+    return smiley_system[str(user_id)][chore]
+
+# Command to view smileys for a user
 @bot.command()
 async def viewsmileys(ctx, user: discord.Member = None):
     if user is None:
@@ -301,10 +311,14 @@ async def donechore(ctx, chore_name: str):
         return
 
     if user.id == chores[chore_name]['assigned_to']:
-        assigned_to = get_next_user_in_rotation(chores[chore_name]['rotation'], user.id)
-        chores[chore_name]['assigned_to'] = assigned_to
+        while True:
+            assigned_to = get_next_user_in_rotation(chores[chore_name]['rotation'], user.id)
+            if get_smileys(assigned_to, chore_name) == 0:
+                chores[chore_name]['assigned_to'] = assigned_to
+            else:
+                remove_smiley(assigned_to, chore_name)
     else:
-        pass
+        add_smiley(user.id, chore_name)
 
     chores[chore_name]['last_done_by'] = user.id
     chores[chore_name]['last_done'] = datetime.now().astimezone().date().isoformat()
